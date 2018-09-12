@@ -385,26 +385,33 @@ func (t Table) LookupHost(host string, pick picker) *Target {
 
 func (t Table) lookup(host, path, trace string, pick picker, match matcher) *Target {
 	host = strings.ToLower(host) // routes are always added lowercase
-	for _, r := range t[host] {
-		if match(path, r) {
-			n := len(r.Targets)
-			if n == 0 {
-				return nil
-			}
+	for hostKey, routes := range t {
+		g, err := glob.Compile(hostKey)
+		if err != nil {
+			log.Printf("[ERROR] failed to compile glob %s, %s", hostKey, err)
+			return nil
+		}
+		for _, r := range routes {
+			if g.Match(host) && match(path, r) {
+				n := len(r.Targets)
+				if n == 0 {
+					return nil
+				}
 
-			var target *Target
-			if n == 1 {
-				target = r.Targets[0]
-			} else {
-				target = pick(r)
+				var target *Target
+				if n == 1 {
+					target = r.Targets[0]
+				} else {
+					target = pick(r)
+				}
+				if trace != "" {
+					log.Printf("[TRACE] %s Match %s%s", trace, r.Host, r.Path)
+				}
+				return target
 			}
 			if trace != "" {
-				log.Printf("[TRACE] %s Match %s%s", trace, r.Host, r.Path)
+				log.Printf("[TRACE] %s No match %s%s", trace, r.Host, r.Path)
 			}
-			return target
-		}
-		if trace != "" {
-			log.Printf("[TRACE] %s No match %s%s", trace, r.Host, r.Path)
 		}
 	}
 	return nil
